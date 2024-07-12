@@ -58,7 +58,7 @@ app.layout = html.Div([
         id='metric-selector',
         options=[
             {'label': 'Spend', 'value': 'spend'},
-            {'label': 'Purchases', 'value': 'impressions'},
+            {'label': 'Impressions', 'value': 'impressions'},
             {'label': 'Purchase Revenue', 'value': 'conversions_value'},
             {'label': 'Purchase ROAS', 'value': 'purchase_roas'},
             {'label': 'CPA', 'value': 'cpa'},
