@@ -18,26 +18,35 @@ AD_ACCOUNTS = {
 }
 
 def fetch_meta_ads_data(account_id, start_date=None, end_date=None):
+    all_data = []
     params = {
         'access_token': ACCESS_TOKEN,
         'fields': 'spend,campaign_name,conversions,impressions,date_start,date_stop',
         'time_increment': '1',
         'level': 'campaign',
-        'time_range': f'{start_date},{end_date}'
+        'time_range': '{"since": "2024-6-18", "until": "2024-7-17"}',
+        'limit' : 100,
     }
     response = requests.get(f"{API_BASE_URL}/{account_id}/insights", params=params)
+    print(f"Request URL: {response.url}")  # Print the request URL for debugging
+    print(f"Response Status Code: {response.status_code}")  # Print response status code
     if response.status_code != 200:
-        print(f"Error: {response.json()}")
+        print(f"Error: {response.json()}")  # Print the error message if the response is not successful
         return pd.DataFrame()
-    
+        
     data = response.json().get('data', [])
+    print(f"Fetched Data: {data}")  # Print the fetched data for debugging
     df = pd.DataFrame(data)
-    
-    # Convert date columns to datetime
-    
-    df['date_start'] = pd.to_datetime(df['date_start'])
-    df['date_stop'] = pd.to_datetime(df['date_stop'])  # or another appropriate column for date
+        
+        # Convert date columns to datetime
+    if not df.empty:
+        df['date_start'] = pd.to_datetime(df['date_start'])
+        df['date_stop'] = pd.to_datetime(df['date_stop'])
+        df['date'] = df['date_start']  # or another appropriate column for date
+    else:
+        print(f"DataFrame is empty for account {account_id}")
     return df
+
 
 
 # Initialize the Dash app
@@ -58,8 +67,8 @@ app.layout = html.Div([
         id='metric-selector',
         options=[
             {'label': 'Spend', 'value': 'spend'},
-            {'label': 'Impressions', 'value': 'impressions'},
-            {'label': 'Purchase Revenue', 'value': 'conversions_value'},
+            {'label': 'Purchases', 'value': 'purchases'},
+            {'label': 'Purchase Revenue', 'value': 'purchase_revenue'},
             {'label': 'Purchase ROAS', 'value': 'purchase_roas'},
             {'label': 'CPA', 'value': 'cpa'},
             {'label': 'Clicks', 'value': 'clicks'},
@@ -67,71 +76,44 @@ app.layout = html.Div([
         value='spend',
         multi=False
     ),
-
-        html.Label('Select Date Range:'),
-    DatePickerRange(
-        id='date-range',
-        display_format='YYYY-MM-DD',
-        start_date=(pd.to_datetime('today') - pd.DateOffset(days=30)).date(),
-        end_date=pd.to_datetime('today').date()
-    ),
     
     dcc.Graph(id='line-graph'),
     
-
+    # dcc.Checklist(
+    #     id='status-filter',
+    #     options=[
+    #         {'label': 'Active', 'value': 'active'},
+    #         {'label': 'Paused', 'value': 'paused'},
+    #         {'label': 'Deleted', 'value': 'deleted'},
+    #     ],
+    #     value=['active', 'paused']
+    # ),
     
-    dcc.Checklist(
-        id='status-filter',
-        options=[
-            {'label': 'Active', 'value': 'active'},
-            {'label': 'Paused', 'value': 'paused'},
-            {'label': 'Deleted', 'value': 'deleted'},
-        ],
-        value=['active', 'paused']
-    ),
+    # dcc.Graph(id='campaign-table'),
     
-    dcc.Graph(id='campaign-table'),
-    
-    html.Div(id='adset-detail')
+    # html.Div(id='adset-detail')
 ])
 
-# Callback to update line graph based on user inputs
 @app.callback(
     Output('line-graph', 'figure'),
     Input('metric-selector', 'value'),
-    Input('account-selector', 'value'),
-    Input('date-range', 'start_date'),
-    Input('date-range', 'end_date')
+    Input('account-selector', 'value')
 )
-def update_line_graph(selected_metric, selected_account, start_date, end_date):
-    df = fetch_meta_ads_data(selected_account, start_date, end_date)
-    fig = px.line(df, x='date', y=selected_metric, color='campaign_name')
-    fig.update_yaxes(categoryorder="category descending")
+def update_line_graph(selected_metric, selected_account):
+    df = fetch_meta_ads_data(selected_account)
+    if df.empty:
+        return px.line(title="No data available")
+    
+    # Print the data used for plotting the line graph
+    print(f"Data for line graph:\n{df[['date', selected_metric, 'campaign_name']]}")
+    
+    try:
+        fig = px.line(df, x='date', y=selected_metric, color='campaign_name')
+        fig.update_yaxes(categoryorder="category descending")
+    except Exception as e:
+        print(f"Exception while creating line graph: {e}")
+        return px.line(title="Error creating graph")
     return fig
-
-
-# def update_line_graph(selected_metric, selected_account):
-#     df = fetch_meta_ads_data(selected_account)
-#     if df.empty:
-#         return px.line(title="No data available")
-    
-#     # Ensure the DataFrame is sorted by date
-#     df_sorted = df.sort_values(by=['date', selected_metric])
-    
-#     # Print the sorted data used for plotting the line graph
-#     print(f"Sorted Data for line graph:\n{df_sorted[['date', selected_metric, 'campaign_name']]}")
-    
-#     # Determine the range for the y-axis based on the selected metric
-#     y_min = df_sorted[selected_metric].min()
-#     y_max = df_sorted[selected_metric].max()
-    
-#     try:
-#         fig = px.line(df_sorted, x='date', y=selected_metric, color='campaign_name')
-#         fig.update_layout(yaxis=dict(range=[0, y_max]))
-#     except Exception as e:
-#         print(f"Exception while creating line graph: {e}")
-#         return px.line(title="Error creating graph")
-#     return fig
 
 # @app.callback(
 #     Output('campaign-table', 'figure'),
